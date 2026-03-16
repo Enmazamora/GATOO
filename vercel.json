@@ -5,5 +5,10 @@
       "source": "/api/chat",
       "destination": "/api/chat.py"
     }
-  ]
+  ],
+  "functions": {
+    "api/chat.py": {
+      "includeFiles": ["api/gato.pdf", "api/index.html", "gato.pdf", "index.html"]
+    }
+  }
 }

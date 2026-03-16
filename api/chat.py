@@ -12,10 +12,14 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Configuration ---
+# --- Configuration ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-PDF_PATH = os.path.join(PROJECT_ROOT, "gato.pdf")
-HTML_PATH = os.path.join(PROJECT_ROOT, "index.html")
+# Try root first, then local api folder for Vercel bundling
+PDF_PATH = os.path.join(BASE_DIR, "gato.pdf") if os.path.exists(os.path.join(BASE_DIR, "gato.pdf")) else os.path.join(os.path.dirname(BASE_DIR), "gato.pdf")
+HTML_PATH = os.path.join(BASE_DIR, "index.html") if os.path.exists(os.path.join(BASE_DIR, "index.html")) else os.path.join(os.path.dirname(BASE_DIR), "index.html")
+
+print(f"Buscando PDF en: {PDF_PATH}")
+print(f"Buscando HTML en: {HTML_PATH}")
 CHUNK_SIZE = 600
 CHUNK_OVERLAP = 100
 TOP_K = 3
@@ -181,6 +185,13 @@ def chat():
     
     if not query:
         return jsonify({"answer": "Habla, mortal. ¿Qué deseas saber?"})
+
+    if not all_chunks:
+        # Diagnostic message in response for the user
+        pdf_exists = os.path.exists(PDF_PATH)
+        html_exists = os.path.exists(HTML_PATH)
+        debug_info = f"(Debug: PDF:{pdf_exists}, HTML:{html_exists}, Path:{PDF_PATH})"
+        return jsonify({"answer": f"El Oráculo está mudo porque no encuentra sus sombras. {debug_info}"})
 
     context_chunks = retrieve_context(query)
 
