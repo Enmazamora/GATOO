@@ -1,0 +1,6 @@
+flask
+flask-cors
+pypdf
+beautifulsoup4
+groq
+scikit-learn
