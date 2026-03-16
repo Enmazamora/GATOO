@@ -178,6 +178,7 @@ PREGUNTA DEL MORTAL:
         return f"El Oráculo sufre un oscuro error con Groq: {str(e)}"
 
 # --- Flask endpoint ---
+@app.route('/api/chat', methods=['POST'])
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.json or {}
