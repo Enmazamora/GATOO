@@ -8,7 +8,7 @@
   ],
   "functions": {
     "api/chat.py": {
-      "includeFiles": ["api/gato.pdf", "api/index.html", "gato.pdf", "index.html"]
+      "includeFiles": "api/**"
     }
   }
 }
