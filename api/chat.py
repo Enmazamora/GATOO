@@ -5,8 +5,8 @@ from flask_cors import CORS
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
 from groq import Groq
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+# --- Environment Fixes (Vercel) ---
+os.environ['JOBLIB_TEMP_FOLDER'] = '/tmp'
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +27,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "gsk_NusTGdBy1KHXVwtwkeTDWGdyb3FYi
 # --- Text Extraction ---
 def get_pdf_text(path):
     if not os.path.exists(path):
+        print(f"ERROR: PDF not found at {path}")
         return ""
     try:
         reader = PdfReader(path)
@@ -37,6 +38,7 @@ def get_pdf_text(path):
 
 def get_html_text(path):
     if not os.path.exists(path):
+        print(f"ERROR: HTML not found at {path}")
         return ""
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -60,6 +62,48 @@ def chunk_text(text, size, overlap):
             chunks.append(chunk)
     return chunks
 
+# --- Lightweight TF-IDF Implementation ---
+import math
+from collections import Counter
+
+def get_tokens(text):
+    return re.findall(r'\w+', text.lower())
+
+def compute_tfidf(chunks):
+    total_docs = len(chunks)
+    doc_tokens = [get_tokens(c) for c in chunks]
+    
+    # DF (Document Frequency)
+    df = Counter()
+    for tokens in doc_tokens:
+        unique_tokens = set(tokens)
+        for t in unique_tokens:
+            df[t] += 1
+            
+    # IDF
+    idf = {t: math.log(total_docs / (count + 1)) for t, count in df.items()}
+    
+    # TF-IDF vectors for docs
+    doc_vectors = []
+    for tokens in doc_tokens:
+        tf = Counter(tokens)
+        vec = {t: (count / len(tokens)) * idf.get(t, 0) for t, count in tf.items()}
+        doc_vectors.append(vec)
+        
+    return doc_vectors, idf
+
+def cosine_similarity_lite(vec1, vec2):
+    intersection = set(vec1.keys()) & set(vec2.keys())
+    numerator = sum([vec1[x] * vec2[x] for x in intersection])
+    
+    sum1 = sum([vec1[x]**2 for x in vec1.keys()])
+    sum2 = sum([vec2[x]**2 for x in vec2.keys()])
+    denominator = math.sqrt(sum1) * math.sqrt(sum2)
+    
+    if not denominator:
+        return 0.0
+    return float(numerator) / denominator
+
 # --- Initialize knowledge base ---
 print("Consolidando el conocimiento del Oráculo (via Groq)...")
 all_chunks = []
@@ -76,21 +120,26 @@ if html_text:
     all_chunks.extend(html_chunks)
     print(f"HTML: {len(html_chunks)} fragmentos cargados.")
 
-# --- TF-IDF for retrieval ---
+# Build custom vectors
 if all_chunks:
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2))
-    tfidf_matrix = vectorizer.fit_transform(all_chunks)
+    DOC_VECTORS, IDF = compute_tfidf(all_chunks)
     print(f"Total: {len(all_chunks)} fragmentos listos para el Oráculo.")
 else:
     print("ALERTA: Base de conocimiento vacía.")
+    DOC_VECTORS, IDF = [], {}
 
 def retrieve_context(query, top_k=TOP_K):
     if not all_chunks:
         return []
-    query_vec = vectorizer.transform([query])
-    sims = cosine_similarity(query_vec, tfidf_matrix)[0]
-    top_indices = sims.argsort()[::-1][:top_k]
-    return [all_chunks[i] for i in top_indices if sims[i] > 0.01]
+    
+    tokens = get_tokens(query)
+    tf = Counter(tokens)
+    query_vec = {t: (count / len(tokens)) * IDF.get(t, 0) for t, count in tf.items()}
+    
+    similarities = [cosine_similarity_lite(query_vec, doc_vec) for doc_vec in DOC_VECTORS]
+    
+    results = sorted(enumerate(similarities), key=lambda x: x[1], reverse=True)[:top_k]
+    return [all_chunks[i] for i, sim in results if sim > 0.01]
 
 # --- Groq AI ---
 def ask_groq(query, context_chunks):
